@@ -1,20 +1,28 @@
 ﻿using AngleSharp;
-using System.Text;
+using System.ComponentModel;
 
 class Parser
 {
-    public async Task Parse(string[] args)
+    public event Action? Changed;
+
+    private readonly string filePath = @"./coins.txt";
+
+    private async Task<List<string>> Parse()
     {
+        string url = "https://www.nbrb.by/today/services/coins/avail/1";
+        List<string> listOfCoins = new();
         try
         {
-            string url = "https://www.nbrb.by/today/services/coins/avail/1";
-
             var config = Configuration.Default.WithDefaultLoader();
             var context = BrowsingContext.New(config);
             var document = await context.OpenAsync(url);
             var table = document.QuerySelector("div.table-block table");
 
-            if (table != null)
+            if (table == null)
+            {
+                throw new ArgumentNullException();   
+            }
+            else
             {
                 var rows = table.QuerySelectorAll("tbody tr");
 
@@ -22,33 +30,73 @@ class Parser
                 {
                     if (row.QuerySelector("th") != null) continue;
 
-                    var cells = row.QuerySelectorAll("td:not([colspan='3'])");
+                    var rowInfo = row.QuerySelector("td:not([colspan='3'])");
 
-                    if (cells.Length > 0)
+                    if (rowInfo != null)
                     {
-                        var coinNameCell = cells[0].QuerySelector("a") ?? cells[0];
-                        Console.WriteLine($"{coinNameCell.TextContent.Trim()}");
+                        listOfCoins.Add((rowInfo.QuerySelector("a") ?? rowInfo).TextContent.Trim());
                     }
                 }
             }
-            else
+            if (!File.Exists(filePath))
             {
-                Console.WriteLine("Таблица не найдена.");
+                WriteToFile(listOfCoins);
             }
+            return listOfCoins;
         }
-        catch (Exception ex) 
+        catch (ArgumentNullException ex)
         {
             Console.WriteLine(ex.Message);
+            return new();
         }
     }
 
-    private void CheckForUpdates()
+    public async Task CheckForUpdates()
     {
+        var newListOfCoins = await Parse();
+        var previousListOfCoins = ReadFromFile();
 
+        if(previousListOfCoins.Count == newListOfCoins.Count)
+        {
+            foreach( var e in newListOfCoins)
+            {
+                previousListOfCoins.Remove(e);
+            }
+            if (previousListOfCoins.Count != 0)
+            {
+                Changed?.Invoke();
+            }
+        }
+        else
+        {
+            Changed?.Invoke();
+        }
+        WriteToFile(newListOfCoins);
     }
 
-    private void WriteNewFile()
+    private void WriteToFile(List<string> listOfCoins)
     {
-
+        using (StreamWriter sw = new StreamWriter(filePath, false))
+        {
+            foreach (var e in listOfCoins)
+            {
+                sw.WriteLine(e.ToString());
+            }
+        }
     }
+
+    private List<string> ReadFromFile()
+    {
+        List<string> listOfCoins = new List<string>();
+
+        using (StreamReader sr = new StreamReader(filePath)) 
+        {
+            while (!sr.EndOfStream) 
+            {
+                 listOfCoins.Add(sr.ReadLine());
+            }
+        }
+            return listOfCoins;
+    }
+
 }
