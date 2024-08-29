@@ -8,11 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Telegram.Bot" Version="19.0.0" />
+    <PackageReference Include="AngleSharp" Version="1.1.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ClassLibrary1\DatabaseLibrary.csproj" />
+    <ProjectReference Include="..\TelegramCoinBot\TelegramCoinBot.csproj" />
   </ItemGroup>
 
 </Project>

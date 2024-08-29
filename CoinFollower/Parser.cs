@@ -1,102 +1,111 @@
 ﻿using AngleSharp;
+using CoinFollower;
 using System.ComponentModel;
 
-class Parser
+namespace CoinFollower
 {
-    public event Action? Changed;
-
-    private readonly string filePath = @"./coins.txt";
-
-    private async Task<List<string>> Parse()
+    public class Parser
     {
-        string url = "https://www.nbrb.by/today/services/coins/avail/1";
-        List<string> listOfCoins = new();
-        try
+        public event Func<Task>? Changed;
+
+        private readonly string filePath = @"./coins.txt";
+
+        private async Task<List<Coin>> Parse()
         {
-            var config = Configuration.Default.WithDefaultLoader();
-            var context = BrowsingContext.New(config);
-            var document = await context.OpenAsync(url);
-            var table = document.QuerySelector("div.table-block table");
-
-            if (table == null)
+            string url = "https://www.nbrb.by/today/services/coins/avail/1";
+            List<Coin> listOfCoins = new();
+            try
             {
-                throw new ArgumentNullException();   
-            }
-            else
-            {
-                var rows = table.QuerySelectorAll("tbody tr");
+                var config = Configuration.Default.WithDefaultLoader();
+                var context = BrowsingContext.New(config);
+                var document = await context.OpenAsync(url);
+                var table = document.QuerySelector("div.table-block table");
 
-                foreach (var row in rows)
+                if (table == null)
                 {
-                    if (row.QuerySelector("th") != null) continue;
-
-                    var rowInfo = row.QuerySelector("td:not([colspan='3'])");
-
-                    if (rowInfo != null)
-                    {
-                        listOfCoins.Add((rowInfo.QuerySelector("a") ?? rowInfo).TextContent.Trim());
-                    }
+                    throw new ArgumentNullException();
                 }
+                else
+                {
+                    var rows = table.QuerySelectorAll("tbody tr");
+                    List<string> listOfText = new List<string>();
+                    foreach (var row in rows)
+                    {
+                        if (row.QuerySelector("th") != null) continue;
+
+                        var textRows = row.QuerySelectorAll("td:not([colspan='3'])")
+                            .Where(td => !string.IsNullOrEmpty(td.TextContent.Trim()));
+
+                        if (textRows != null)
+                        {
+
+                            foreach (var text in textRows)
+                                listOfText.Add(text.TextContent.Trim());
+                        }
+                    }
+
+                    for (int i = 0; i < listOfText.Count(); i += 4)
+                    {
+                        listOfCoins.Add(new Coin()
+                        {
+                            Name = listOfText[i],
+                            Material = listOfText[i + 1],
+                            Denomination = listOfText[i + 2],
+                            Description = listOfText[i + 3]
+                        });
+                    }
+                    //listOfCoins.Add(new Coin() { Name = "lasl;,s", Material = "lml;aal", Denomination = "l,la,slamm", Description = "sswwdwd" });
+                }
+
+                return listOfCoins;
             }
-            if (!File.Exists(filePath))
+            catch (ArgumentNullException ex)
             {
-                WriteToFile(listOfCoins);
+                Console.WriteLine(ex.Message);
+                return new();
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                Console.WriteLine("Скорее всего что то на сайте изменилось");
+                return new();
+            }
+        }
+
+        public async Task CheckForUpdates()
+        {
+            var newListOfCoins = await Parse();
+            var previousListOfCoins = Read();
+
+            var newCoins = newListOfCoins.Except(previousListOfCoins).ToList();
+            var oldCoins = previousListOfCoins.Except(newListOfCoins).ToList();
+
+            if (newCoins.Count() > 0 || oldCoins.Count() > 0)
+            {
+                Write(newCoins, oldCoins);
+                await Changed?.Invoke();
+            }
+
+        }
+
+        private void Write(List<Coin> newCoins, List<Coin> oldCoins)
+        {
+            using (ApplicationContext context = new ApplicationContext())
+            {
+                context.Coins.RemoveRange(oldCoins);
+                context.Coins.AddRange(newCoins);
+                context.SaveChanges();
+            }
+        }
+
+        private List<Coin> Read()
+        {
+            var listOfCoins = new List<Coin>();
+            using (ApplicationContext context = new ApplicationContext())
+            {
+                listOfCoins = context.Coins.ToList();
             }
             return listOfCoins;
         }
-        catch (ArgumentNullException ex)
-        {
-            Console.WriteLine(ex.Message);
-            return new();
-        }
+
     }
-
-    public async Task CheckForUpdates()
-    {
-        var newListOfCoins = await Parse();
-        var previousListOfCoins = ReadFromFile();
-
-        if(previousListOfCoins.Count == newListOfCoins.Count)
-        {
-            foreach( var e in newListOfCoins)
-            {
-                previousListOfCoins.Remove(e);
-            }
-            if (previousListOfCoins.Count != 0)
-            {
-                Changed?.Invoke();
-            }
-        }
-        else
-        {
-            Changed?.Invoke();
-        }
-        WriteToFile(newListOfCoins);
-    }
-
-    private void WriteToFile(List<string> listOfCoins)
-    {
-        using (StreamWriter sw = new StreamWriter(filePath, false))
-        {
-            foreach (var e in listOfCoins)
-            {
-                sw.WriteLine(e.ToString());
-            }
-        }
-    }
-
-    private List<string> ReadFromFile()
-    {
-        List<string> listOfCoins = new List<string>();
-
-        using (StreamReader sr = new StreamReader(filePath)) 
-        {
-            while (!sr.EndOfStream) 
-            {
-                 listOfCoins.Add(sr.ReadLine());
-            }
-        }
-            return listOfCoins;
-    }
-
 }
