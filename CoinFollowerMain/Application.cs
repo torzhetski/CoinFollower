@@ -34,7 +34,7 @@ namespace CoinFollower
             while (!_completionSource.Task.IsCompleted)
             {
                 await _parser.CheckForUpdates();
-                await Task.Delay(TimeSpan.FromSeconds(60));
+                await Task.Delay(TimeSpan.FromMinutes(45));
             }
             await _completionSource.Task;
         }
