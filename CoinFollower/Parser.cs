@@ -1,14 +1,17 @@
 ﻿using AngleSharp;
-using CoinFollower;
-using System.ComponentModel;
 
 namespace CoinFollower
 {
     public class Parser
     {
-        public event Func<Task>? Changed;
+        private Serilog.ILogger _logger;
 
-        private readonly string filePath = @"./coins.txt";
+        public event Func<Task>? Changed;
+        
+        public Parser(Serilog.ILogger logger ) 
+        {
+            _logger = logger;
+        }
 
         private async Task<List<Coin>> Parse()
         {
@@ -54,20 +57,23 @@ namespace CoinFollower
                             Description = listOfText[i + 3]
                         });
                     }
-                    //listOfCoins.Add(new Coin() { Name = "lasl;,s", Material = "lml;aal", Denomination = "l,la,slamm", Description = "sswwdwd" });
                 }
 
                 return listOfCoins;
             }
             catch (ArgumentNullException ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.Error($"Таблицы нет: {ex.Message}");
                 return new();
             }
-            catch (ArgumentOutOfRangeException ex)
+            catch (Exception ex)
             {
-                Console.WriteLine("Скорее всего что то на сайте изменилось");
+                Console.WriteLine($"Скорее всего что то на сайте изменилось{ex.Message}");
                 return new();
+            }
+            finally 
+            {
+                _logger.Information("Получены новые данные с сайта");
             }
         }
 
@@ -89,20 +95,35 @@ namespace CoinFollower
 
         private void Write(List<Coin> newCoins, List<Coin> oldCoins)
         {
-            using (ApplicationContext context = new ApplicationContext())
+            try
             {
-                context.Coins.RemoveRange(oldCoins);
-                context.Coins.AddRange(newCoins);
-                context.SaveChanges();
+                using (ApplicationContext context = new ApplicationContext())
+                {
+                    context.Coins.RemoveRange(oldCoins);
+                    context.Coins.AddRange(newCoins);
+                    context.SaveChanges();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"Ошибка записи в бд {ex.Message}");
             }
         }
 
         private List<Coin> Read()
         {
             var listOfCoins = new List<Coin>();
-            using (ApplicationContext context = new ApplicationContext())
+            try
             {
-                listOfCoins = context.Coins.ToList();
+                using (ApplicationContext context = new ApplicationContext())
+                {
+                    listOfCoins = context.Coins.ToList();
+                }
+                
+            }
+            catch (Exception ex) 
+            {
+                _logger.Error($"Ошибка записи в бд {ex.Message}");
             }
             return listOfCoins;
         }
